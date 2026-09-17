@@ -1,73 +1,179 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_LSM6DSO32.h>
+#include "MAX30105.h"
 
 Adafruit_LSM6DSO32 imu;
-bool imuReady = false;
+MAX30105 ppg;
 
-void setup() {
+bool imuReady = false;
+bool ppgReady = false;
+bool debug = true;
+
+void setup()
+{
   Serial.begin(115200);
   delay(1000);
 
-  Serial.println("Starting I2C: SDA=GPIO8, SCL=GPIO9");
-  if (!Wire.begin(8, 9)) {
+  if (debug)
+  {
+    Serial.println("Starting I2C: SDA=GPIO8, SCL=GPIO9");
+  }
+
+  if (!Wire.begin(8, 9))
+  {
     Serial.println("Failed to start I2C bus.");
     return;
   }
+
   Wire.setClock(100000);
 
-  uint8_t deviceCount = 0;
-  for (uint8_t address = 1; address < 127; ++address) {
-    Wire.beginTransmission(address);
-    if (Wire.endTransmission() == 0) {
-      Serial.printf("I2C device responded at 0x%02X\n", address);
-      ++deviceCount;
+  // -----------------------------
+  // I2C scanner
+  // -----------------------------
+  if (debug)
+  {
+    uint8_t deviceCount = 0;
+
+    for (uint8_t address = 1; address < 127; ++address)
+    {
+      Wire.beginTransmission(address);
+
+      if (Wire.endTransmission() == 0)
+      {
+        Serial.printf("I2C device responded at 0x%02X\n", address);
+        ++deviceCount;
+      }
+    }
+
+    if (deviceCount == 0)
+    {
+      Serial.println("No I2C devices responded.");
     }
   }
-  if (deviceCount == 0) {
-    Serial.println("No I2C devices responded. Check power, common GND, SDA and SCL.");
-  }
 
-  for (uint8_t address : {0x6A, 0x6B}) {
-    if (imu.begin_I2C(address, &Wire)) {
+  // -----------------------------
+  // Initialize IMU
+  // -----------------------------
+  for (uint8_t address : {0x6A, 0x6B})
+  {
+    if (imu.begin_I2C(address, &Wire))
+    {
       imuReady = true;
-      Serial.printf("LSM6DSO32 initialized at 0x%02X!\n", address);
+
+      if (debug)
+      {
+        Serial.printf(
+            "LSM6DSO32 initialized at 0x%02X!\n",
+            address);
+      }
+
       break;
     }
   }
-  if (!imuReady) {
-    Serial.println("LSM6DSO32 not detected at 0x6A or 0x6B. Check wiring and sensor model, then reset.");
+
+  if (!imuReady)
+  {
+    Serial.println(
+        "LSM6DSO32 not detected at 0x6A or 0x6B.");
+  }
+
+  // -----------------------------
+  // Initialize MAX30101
+  // -----------------------------
+  if (ppg.begin(Wire, I2C_SPEED_STANDARD))
+  {
+    ppgReady = true;
+
+    if (debug)
+    {
+      Serial.println("MAX30101 initialized!");
+    }
+
+    byte ledBrightness = 30;
+    byte sampleAverage = 4;
+    byte ledMode = 3;
+
+    int sampleRate = 100;
+    int pulseWidth = 411;
+    int adcRange = 4096;
+
+    ppg.setup(
+        ledBrightness,
+        sampleAverage,
+        ledMode,
+        sampleRate,
+        pulseWidth,
+        adcRange);
+  }
+  else
+  {
+    Serial.println("MAX30101 not detected.");
+  }
+
+  if (debug)
+  {
+    Serial.println("Setup complete.");
   }
 }
 
-void loop() {
-  if (!imuReady) {
-    Serial.println("IMU unavailable. Check startup diagnostics; reset to scan again.");
-    delay(3000);
-    return;
+void loop()
+{
+  // -----------------------------
+  // IMU
+  // -----------------------------
+  if (imuReady)
+  {
+    sensors_event_t accel;
+    sensors_event_t gyro;
+    sensors_event_t temp;
+
+    imu.getEvent(&accel, &gyro, &temp);
+
+    if (debug)
+    {
+      Serial.print("Accel: ");
+      Serial.print(accel.acceleration.x);
+      Serial.print(", ");
+      Serial.print(accel.acceleration.y);
+      Serial.print(", ");
+      Serial.print(accel.acceleration.z);
+
+      Serial.print(" | Gyro: ");
+      Serial.print(gyro.gyro.x);
+      Serial.print(", ");
+      Serial.print(gyro.gyro.y);
+      Serial.print(", ");
+      Serial.print(gyro.gyro.z);
+    }
   }
 
-  sensors_event_t accel;
-  sensors_event_t gyro;
-  sensors_event_t temp;
+  // -----------------------------
+  // PPG
+  // -----------------------------
+  if (ppgReady)
+  {
+    long red = ppg.getRed();
+    long ir = ppg.getIR();
+    long green = ppg.getGreen();
 
-  imu.getEvent(&accel, &gyro, &temp);
+    if (debug)
+    {
+      Serial.print(" | PPG Red: ");
+      Serial.print(red);
 
-  Serial.print("Accel X: ");
-  Serial.print(accel.acceleration.x);
-  Serial.print(" Y: ");
-  Serial.print(accel.acceleration.y);
-  Serial.print(" Z: ");
-  Serial.println(accel.acceleration.z);
+      Serial.print(" IR: ");
+      Serial.print(ir);
 
-  Serial.print(" | G: ");
-  Serial.print(gyro.gyro.x);
-  Serial.print(", ");
-  Serial.print(gyro.gyro.y);
-  Serial.print(", ");
-  Serial.print(gyro.gyro.z);
+      Serial.print(" Green: ");
+      Serial.print(green);
+    }
+  }
 
-  Serial.println();
+  if (debug)
+  {
+    Serial.println();
+  }
 
-  delay(100);
+  delay(20);
 }
