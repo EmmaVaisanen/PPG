@@ -13,8 +13,10 @@ BAUD = 115200
 MAX_POINTS = 1000
 WINDOW_SECONDS = 10
 
+BASELINE_SAMPLES = 100
+
 Y_MARGIN_FACTOR = 0.30
-MIN_Y_MARGIN = 5000
+MIN_Y_MARGIN = 100
 
 # --------------------------------------------------
 # State
@@ -24,6 +26,9 @@ start_time = None
 
 time_data = deque(maxlen=MAX_POINTS)
 ir_data = deque(maxlen=MAX_POINTS)
+
+baseline_buffer = deque(maxlen=BASELINE_SAMPLES)
+filtered_data = deque(maxlen=MAX_POINTS)
 
 # --------------------------------------------------
 # Serial setup
@@ -52,12 +57,12 @@ def initialize_plot():
     fig, ax = plt.subplots()
     line, = ax.plot([], [])
 
-    ax.set_title("Live PPG")
+    ax.set_title("Live PPG - DC Removed")
     ax.set_xlabel("Time [s]")
-    ax.set_ylabel("IR value")
+    ax.set_ylabel("IR AC component [counts]")
 
     ax.set_xlim(0, WINDOW_SECONDS)
-    ax.set_ylim(0, 262143)
+    ax.set_ylim(-1000, 1000)
 
     plt.show(block=False)
 
@@ -71,8 +76,6 @@ def initialize_plot():
 def parse_data(raw):
     parts = raw.split(",")
 
-    # Expected:
-    # time,red,ir,green,ax,ay,az,gx,gy,gz
     if len(parts) != 10:
         return None
 
@@ -87,6 +90,23 @@ def parse_data(raw):
 
 
 # --------------------------------------------------
+# Remove baseline / DC component
+# --------------------------------------------------
+
+def remove_baseline(ir):
+    baseline_buffer.append(ir)
+
+    baseline = (
+        sum(baseline_buffer)
+        / len(baseline_buffer)
+    )
+
+    ir_ac = ir - baseline
+
+    return ir_ac
+
+
+# --------------------------------------------------
 # Update graph
 # --------------------------------------------------
 
@@ -94,14 +114,24 @@ def update_plot(ax, line, time_s, ir):
     time_data.append(time_s)
     ir_data.append(ir)
 
-    line.set_data(time_data, ir_data)
+    ir_ac = remove_baseline(ir)
+
+    filtered_data.append(ir_ac)
+
+    line.set_data(
+        time_data,
+        filtered_data
+    )
 
     # -----------------------------
     # Rolling X-axis
     # -----------------------------
 
     if time_s < WINDOW_SECONDS:
-        ax.set_xlim(0, WINDOW_SECONDS)
+        ax.set_xlim(
+            0,
+            WINDOW_SECONDS
+        )
     else:
         ax.set_xlim(
             time_s - WINDOW_SECONDS,
@@ -112,9 +142,9 @@ def update_plot(ax, line, time_s, ir):
     # Adaptive Y-axis
     # -----------------------------
 
-    if len(ir_data) > 1:
-        ymin = min(ir_data)
-        ymax = max(ir_data)
+    if len(filtered_data) > 1:
+        ymin = min(filtered_data)
+        ymax = max(filtered_data)
 
         yrange = ymax - ymin
 
@@ -152,8 +182,6 @@ def main():
             if not raw:
                 plt.pause(0.01)
                 continue
-
-            print("RX:", raw)
 
             data = parse_data(raw)
 
