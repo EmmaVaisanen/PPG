@@ -11,7 +11,7 @@ constexpr int SDA_PIN = 8;
 constexpr int SCL_PIN = 9;
 constexpr uint32_t I2C_FREQUENCY = 100000;
 
-constexpr bool DEBUG = true;
+constexpr bool DEBUG = false;
 
 constexpr byte PPG_LED_BRIGHTNESS = 30;
 constexpr byte PPG_SAMPLE_AVERAGE = 4;
@@ -41,6 +41,7 @@ struct SensorData
     float ax;
     float ay;
     float az;
+    float amag;
 
     float gx;
     float gy;
@@ -107,7 +108,7 @@ void setup()
     {
         // Header for Python / CSV
         Serial.println(
-            "time_ms,red,ir,green,ax,ay,az,gx,gy,gz"
+            "time_ms,red,ir,green,ax,ay,az,amag,gx,gy,gz"
         );
     }
 }
@@ -244,6 +245,12 @@ SensorData readSensors()
         data.ay = accel.acceleration.y;
         data.az = accel.acceleration.z;
 
+        data.amag = sqrt(
+            data.ax * data.ax +
+            data.ay * data.ay +
+            data.az * data.az
+        );
+
         data.gx = gyro.gyro.x;
         data.gy = gyro.gyro.y;
         data.gz = gyro.gyro.z;
@@ -277,6 +284,7 @@ void printDebug(const SensorData &data)
         data.ax,
         data.ay,
         data.az,
+        data.amag,
 
         data.gx,
         data.gy,
@@ -296,7 +304,7 @@ void printCSV(const SensorData &data)
 {
     Serial.printf(
         "%lu,%ld,%ld,%ld,"
-        "%.4f,%.4f,%.4f,"
+        "%.4f,%.4f,%.4f,%.4f,"
         "%.4f,%.4f,%.4f\n",
 
         data.timeMs,
@@ -308,6 +316,7 @@ void printCSV(const SensorData &data)
         data.ax,
         data.ay,
         data.az,
+        data.amag,
 
         data.gx,
         data.gy,
