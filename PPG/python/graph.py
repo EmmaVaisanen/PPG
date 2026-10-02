@@ -25,10 +25,10 @@ MIN_Y_MARGIN = 100
 start_time = None
 
 time_data = deque(maxlen=MAX_POINTS)
-ir_data = deque(maxlen=MAX_POINTS)
+green_data = deque(maxlen=MAX_POINTS)
 
 baseline_buffer = deque(maxlen=BASELINE_SAMPLES)
-filtered_data = deque(maxlen=MAX_POINTS)
+filtegreen_data = deque(maxlen=MAX_POINTS)
 
 # --------------------------------------------------
 # Serial setup
@@ -59,7 +59,7 @@ def initialize_plot():
 
     ax.set_title("Live PPG - DC Removed")
     ax.set_xlabel("Time [s]")
-    ax.set_ylabel("IR AC component [counts]")
+    ax.set_ylabel("green AC component [counts]")
 
     ax.set_xlim(0, WINDOW_SECONDS)
     ax.set_ylim(-1000, 1000)
@@ -76,14 +76,14 @@ def initialize_plot():
 def parse_data(raw):
     parts = raw.split(",")
 
-    if len(parts) != 10:
+    if len(parts) != 11:
         return None
 
     try:
         time_ms = float(parts[0])
-        ir = float(parts[2])
+        green = float(parts[2])
 
-        return time_ms, ir
+        return time_ms, green
 
     except ValueError:
         return None
@@ -93,34 +93,34 @@ def parse_data(raw):
 # Remove baseline / DC component
 # --------------------------------------------------
 
-def remove_baseline(ir):
-    baseline_buffer.append(ir)
+def remove_baseline(green):
+    baseline_buffer.append(green)
 
     baseline = (
         sum(baseline_buffer)
         / len(baseline_buffer)
     )
 
-    ir_ac = ir - baseline
+    green_ac = green - baseline
 
-    return ir_ac
+    return green_ac
 
 
 # --------------------------------------------------
 # Update graph
 # --------------------------------------------------
 
-def update_plot(ax, line, time_s, ir):
+def update_plot(ax, line, time_s, green):
     time_data.append(time_s)
-    ir_data.append(ir)
+    green_data.append(green)
 
-    ir_ac = remove_baseline(ir)
+    green_ac = remove_baseline(green)
 
-    filtered_data.append(ir_ac)
+    filtegreen_data.append(green_ac)
 
     line.set_data(
         time_data,
-        filtered_data
+        filtegreen_data
     )
 
     # -----------------------------
@@ -142,9 +142,9 @@ def update_plot(ax, line, time_s, ir):
     # Adaptive Y-axis
     # -----------------------------
 
-    if len(filtered_data) > 1:
-        ymin = min(filtered_data)
-        ymax = max(filtered_data)
+    if len(filtegreen_data) > 1:
+        ymin = min(filtegreen_data)
+        ymax = max(filtegreen_data)
 
         yrange = ymax - ymin
 
@@ -189,7 +189,7 @@ def main():
                 plt.pause(0.01)
                 continue
 
-            time_ms, ir = data
+            time_ms, green = data
 
             if start_time is None:
                 start_time = time_ms
@@ -202,7 +202,7 @@ def main():
                 ax,
                 line,
                 time_s,
-                ir
+                green
             )
 
             plt.pause(0.01)
