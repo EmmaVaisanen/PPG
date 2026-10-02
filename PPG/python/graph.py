@@ -81,7 +81,7 @@ def parse_data(raw):
 
     try:
         time_ms = float(parts[0])
-        green = float(parts[2])
+        green = float(parts[3])
 
         return time_ms, green
 
