@@ -6,9 +6,12 @@
 // --------------------------------------------------
 // Configuration
 // --------------------------------------------------
+constexpr int IMU_SDA_PIN = 6;
+constexpr int IMU_SCL_PIN = 7;
 
-constexpr int SDA_PIN = 8;
-constexpr int SCL_PIN = 9;
+constexpr int PPG_SDA_PIN = 8;
+constexpr int PPG_SCL_PIN = 9;
+
 constexpr uint32_t I2C_FREQUENCY = 100000;
 
 constexpr bool DEBUG = false;
@@ -26,6 +29,8 @@ constexpr int PPG_ADC_RANGE = 4096;
 
 Adafruit_LSM6DSO32 imu;
 MAX30105 ppg;
+
+TwoWire IMUWire = TwoWire(1);
 
 bool imuReady = false;
 bool ppgReady = false;
@@ -77,14 +82,27 @@ void setup()
     if (DEBUG)
     {
         Serial.println("Starting system...");
-        Serial.println("I2C: SDA=GPIO8, SCL=GPIO9");
+        Serial.println("PPG I2C: SDA=GPIO8, SCL=GPIO9");
+        Serial.println("IMU I2C: SDA=GPIO6, SCL=GPIO7");
     }
 
-    if (!Wire.begin(SDA_PIN, SCL_PIN))
+    // PPG bus
+    if (!Wire.begin(PPG_SDA_PIN, PPG_SCL_PIN))
     {
-        Serial.println("Failed to start I2C bus.");
+        Serial.println("Failed to start PPG I2C bus.");
         return;
     }
+
+    Wire.setClock(I2C_FREQUENCY);
+
+    // IMU bus
+    if (!IMUWire.begin(IMU_SDA_PIN, IMU_SCL_PIN))
+    {
+        Serial.println("Failed to start IMU I2C bus.");
+        return;
+    }
+
+    IMUWire.setClock(I2C_FREQUENCY);
 
     Wire.setClock(I2C_FREQUENCY);
 
@@ -108,8 +126,7 @@ void setup()
     {
         // Header for Python / CSV
         Serial.println(
-            "time_ms,red,ir,green,ax,ay,az,amag,gx,gy,gz"
-        );
+            "time_ms,red,ir,green,ax,ay,az,amag,gx,gy,gz");
     }
 }
 
@@ -151,8 +168,7 @@ void scanI2C()
         {
             Serial.printf(
                 "I2C device found at 0x%02X\n",
-                address
-            );
+                address);
 
             ++deviceCount;
         }
@@ -172,14 +188,13 @@ bool initializeIMU()
 {
     for (uint8_t address : {0x6A, 0x6B})
     {
-        if (imu.begin_I2C(address, &Wire))
+        if (imu.begin_I2C(address, &IMUWire))
         {
             if (DEBUG)
             {
                 Serial.printf(
                     "LSM6DSO32 initialized at 0x%02X\n",
-                    address
-                );
+                    address);
             }
 
             return true;
@@ -187,8 +202,7 @@ bool initializeIMU()
     }
 
     Serial.println(
-        "LSM6DSO32 not detected at 0x6A or 0x6B."
-    );
+        "LSM6DSO32 not detected at 0x6A or 0x6B.");
 
     return false;
 }
@@ -211,8 +225,7 @@ bool initializePPG()
         PPG_LED_MODE,
         PPG_SAMPLE_RATE,
         PPG_PULSE_WIDTH,
-        PPG_ADC_RANGE
-    );
+        PPG_ADC_RANGE);
 
     if (DEBUG)
     {
@@ -248,8 +261,7 @@ SensorData readSensors()
         data.amag = sqrt(
             data.ax * data.ax +
             data.ay * data.ay +
-            data.az * data.az
-        );
+            data.az * data.az);
 
         data.gx = gyro.gyro.x;
         data.gy = gyro.gyro.y;
@@ -292,8 +304,7 @@ void printDebug(const SensorData &data)
 
         data.red,
         data.ir,
-        data.green
-    );
+        data.green);
 }
 
 // --------------------------------------------------
@@ -320,6 +331,5 @@ void printCSV(const SensorData &data)
 
         data.gx,
         data.gy,
-        data.gz
-    );
+        data.gz);
 }
